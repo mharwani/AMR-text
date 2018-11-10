@@ -3,10 +3,18 @@ from collections import OrderedDict
 from nltk.tokenize import word_tokenize
 
 
+"""Constant definitions
+This dictionary of constants returns the index given a constant string
+"""
+_constants = [None, '-', '+', 'imperative', 'interrogative', 'expressive']
+constants = {}
+for idx,_c in enumerate(_constants):
+    constants[_c] = idx
+    
 
 def read_AMR_file(amr_file):
     """Reads an AMR data file and returns all the sentence-amr pairs.
-    Each pair is a tuple of (sentence_words, AMR_graph).
+    Each pair is a tuple (sentence_tokens, AMR_graph).
     """
     pairs = []
     snt = ''
@@ -22,7 +30,6 @@ def read_AMR_file(amr_file):
                 if snt:
                     amr += line
                 else:
-                    print(line)
                     raise Exception("in line " + str(i) + "," + " Expecting: snt. Got: AMR")
             elif '::snt ' in line:
                 if snt and amr:
@@ -78,6 +85,12 @@ class AMRNode:
     
     def add_numeric(self, link, value):
         self.child[link] = value
+    
+    def add_constant(self, link, value):
+        if value not in constants:
+            self.child[link] = constants[None]
+        else:
+            self.child[link] = constants[value]
         
 
 """Class definition for an AMR Graph
@@ -154,7 +167,7 @@ class AMRGraph:
             for link,ref_node in ref[node_id]:
                 #constants
                 if ref_node not in nodes:
-                    nodes[node_id].add_literal(link, ref_node)
+                    nodes[node_id].add_constant(link, ref_node)                   
                 else:
                     nodes[node_id].add_child(link, nodes[ref_node])
     
