@@ -2,5 +2,5 @@
 Neural AMR to Text Generation
 
 # Requires
-Python 3
-NLTK
+* Python 3
+* NLTK
