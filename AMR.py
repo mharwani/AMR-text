@@ -3,6 +3,46 @@ from collections import OrderedDict
 from nltk.tokenize import word_tokenize
 
 
+"""
+This script contains AMR processing functions and class definitions.
+Use this script to read an AMR data file into sentence-AMR pairs.
+Each pair is a tuple containing the english sentence split into a list of tokens
+and its corresponding AMR graph.
+
+Example usage (reading AMR data):
+    import AMR
+    from AMR import AMRNode, AMRGraph
+    pairs = AMR.read_AMR_file('...')
+    for sentence_tokens, AMR_graph in pairs:
+        print('snt: ' + ' '.join(sentence_tokens))
+        AMR_graph.print()
+        
+AMR is a rooted directed graph.
+Each AMR node can have multiple children and parent nodes.
+Only forward edges (children) are stored in this AMRNode representation.
+An AMRNode is defined by its <inst> variable.
+Each AMRNode contains a <child> object which is a dictionary of edges (keys) and child nodes (values)
+
+Example usage (looping through AMR nodes starting from root):
+    def process_node(amr_node):
+        print(amr_node.inst)
+        #procedure for this node
+        for edge_name, child_node in node.child.items():
+            if type(child_node) is str:
+                #child_node is a literal value (eg: "Earth")
+            elif type(child_node) is float:
+                #child_node is a numeric value (eg: 2.0)
+            elif type(child_node) is int:
+                #child_node is a constant (eg: expressive)
+            else:
+                #child_node is an AMRNode
+                process_node(amr_node)
+                
+    process_node(AMR_graph.root)
+
+"""
+
+
 """Constant definitions
 This dictionary of constants returns the index given a constant string
 """
