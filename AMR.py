@@ -45,16 +45,17 @@ Example usage (looping through AMR nodes starting from root):
 
 """Constant definitions
 This dictionary of constants returns the index given a constant string
-"""
+
 _constants = [None, '-', '+', 'imperative', 'interrogative', 'expressive']
 constants = {}
 for idx,_c in enumerate(_constants):
     constants[_c] = idx
-    
+"""    
 
-def read_AMR_file(amr_file):
+def read_AMR_file(amr_file, acyclic=False):
     """Reads an AMR data file and returns all the sentence-amr pairs.
     Each pair is a tuple (sentence_tokens, AMR_graph).
+    Set acyclic to True to return only acyclic AMR graphs
     """
     pairs = []
     snt = ''
@@ -76,10 +77,14 @@ def read_AMR_file(amr_file):
                     tokens = word_tokenize(snt)
                     snt_tokens = [token.lower() for token in tokens]
                     amr_graph = AMRGraph(amr)
-                    pairs.append((snt_tokens, amr_graph))
                     amr = ''
                     ind = line.find('::snt ') + 6
                     snt = line[ind:]
+                    if acyclic:
+                        if not amr_graph.is_cyclic():
+                            pairs.append((snt_tokens, amr_graph))
+                    else:
+                        pairs.append((snt_tokens, amr_graph))
                 elif snt:
                     raise Exception("in line " + str(i) + "," + " Expecting: AMR. Got: snt")
                 else:
@@ -89,8 +94,19 @@ def read_AMR_file(amr_file):
             tokens = word_tokenize(snt)
             snt_tokens = [token.lower() for token in tokens]
             amr_graph = AMRGraph(amr)
-            pairs.append((snt_tokens, amr_graph))
+            if acyclic:
+                if not amr_graph.is_cyclic():
+                    pairs.append((snt_tokens, amr_graph))
+            else:
+                pairs.append((snt_tokens, amr_graph))
 
+    return pairs
+
+
+def read_AMR_files(fnames, acyclic=False):
+    pairs = []
+    for fname in fnames:
+        pairs += read_AMR_file(fname, acyclic)
     return pairs
 
 
@@ -125,12 +141,6 @@ class AMRNode:
     
     def add_numeric(self, link, value):
         self.child[link] = value
-    
-    def add_constant(self, link, value):
-        if value not in constants:
-            self.child[link] = constants[None]
-        else:
-            self.child[link] = constants[value]
         
 
 """Class definition for an AMR Graph
@@ -140,13 +150,17 @@ class AMRGraph:
     def __init__(self, string):
         self.nodes = None
         self.root = None
+        self.size = 0
         AMRGraph.parse(self, string)
         
     def print(self):
         AMRGraph.print_node(self.root, '', [])
+        
+    def is_cyclic(self):
+        return AMRGraph._cyclic(self.root, {})
     
     @staticmethod       
-    def parse_node(node, tokens, i, nodes, ref):
+    def parse_node(node, tokens, i, nodes, ref, size):
         """Reads a set of AMR tokens to parse an empty node.
         Returns the final position of tokens after parsing the node completely.
         Adds unresolved references to the ref dictionary.
@@ -179,15 +193,17 @@ class AMRGraph:
                     "Do nothing"
                 if fl is not None:
                     node.add_numeric(link, fl)
+                    size[0] += 1
                 #Literal
                 elif tokens[i][0] == '\"':
                     node.add_literal(link, tokens[i])
+                    size[0] += 1
                 #new node
                 elif tokens[i] == '(':
                     new_node = AMRNode(None, None)
                     new_node.parent = node.id
                     node.add_child(link, new_node)
-                    i = AMRGraph.parse_node(new_node, tokens, i, nodes, ref)
+                    i = AMRGraph.parse_node(new_node, tokens, i, nodes, ref, size)
                 #Reference or a constant
                 else:
                     if node_id not in ref:
@@ -200,14 +216,15 @@ class AMRGraph:
         return i
     
     @staticmethod
-    def resolve_ref(nodes, ref):
+    def resolve_ref(nodes, ref, size):
         """Resolve all references to the AMR Nodes
         """
         for node_id in ref:
             for link,ref_node in ref[node_id]:
                 #constants
                 if ref_node not in nodes:
-                    nodes[node_id].add_constant(link, ref_node)                   
+                    nodes[node_id].add_literal(link, ref_node)
+                    size[0] += 1
                 else:
                     nodes[node_id].add_child(link, nodes[ref_node])
     
@@ -222,25 +239,43 @@ class AMRGraph:
         graph.root = AMRNode(None, None)
         graph.nodes = OrderedDict()
         ref = {}
+        size = [0]
         #parse root node
-        AMRGraph.parse_node(graph.root, tokens, 0, graph.nodes, ref)
+        AMRGraph.parse_node(graph.root, tokens, 0, graph.nodes, ref, size)
         #Resolve references
-        AMRGraph.resolve_ref(graph.nodes, ref)
+        AMRGraph.resolve_ref(graph.nodes, ref, size)
+        
+        graph.size = size[0] + len(graph.nodes)
         
     @staticmethod 
-    def print_node(node, i, printed):
+    def print_node(node, i, printed, end=' '):
         printed.append(node.id)
-        print(i + '(' + node.id + ' / ' + node.inst)
+        print(i + '(' + node.id + ' / ' + node.inst, end=end)
         i += '  '
         for link,child_node in node.child.items():
             if type(child_node) is str or type(child_node) is float:
-                print(i + ':' + link + ' ' + str(child_node))
+                print(i + ':' + link + ' ' + str(child_node), end=end)
             elif child_node.id in printed:
-                print(i + ':' + link + ' ' + child_node.id)
+                print(i + ':' + link + ' ' + child_node.id, end=end)
             else:
-                print(i + ':' + link)
+                print(i + ':' + link, end=end)
                 AMRGraph.print_node(child_node, i, printed)
-        print(i[0:len(i)-1] + ')')
+        print(i[0:len(i)-1] + ')', end=end)
+    
+    @staticmethod
+    def _cyclic(node, processing):
+        if node in processing:
+            return True
+        processing[node] = True
+        for link,child_node in node.child.items():
+            if type(child_node) is str or type(child_node) is float:
+                continue
+            else:
+                if AMRGraph._cyclic(child_node, processing):
+                    return True
+        if node in processing:
+            del processing[node]
+        return False
 
 
 """Class definition for a Dictionary that handles duplicate keys.
